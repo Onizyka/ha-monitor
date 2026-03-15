@@ -53,10 +53,14 @@ async def start_bot(get_db_func):
         _app.add_handler(CommandHandler("unmute", cmd_unmute))
         await _app.initialize()
         await _app.start()
-        await _app.updater.start_polling(drop_pending_updates=True)
+        await _app.updater.start_polling(
+            drop_pending_updates=True,
+            allowed_updates=[],
+            error_callback=lambda err: logger.warning("Telegram polling error (ignored): %s", err)
+        )
         logger.info("Telegram bot started.")
     except Exception as e:
-        logger.error("Telegram bot failed to start (will retry on next message): %s", e)
+        logger.error("Telegram bot failed to start: %s", e)
         _app = None
 
 
@@ -111,7 +115,11 @@ async def send_alert(message: str, level: str = "warn", html: bool = False) -> b
         )
         return True
     except TelegramError as e:
-        logger.error("Telegram send failed: %s", e)
+        from telegram.error import Conflict
+        if isinstance(e, Conflict):
+            logger.warning("Telegram Conflict (another instance running): %s", e)
+        else:
+            logger.error("Telegram send failed: %s", e)
         return False
     finally:
         # Also send to MAX if enabled
