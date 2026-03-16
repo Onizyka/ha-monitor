@@ -807,7 +807,8 @@ function devImg(d){
 }
 
 const LIST_LIMIT=10;
-let _devPage=0, _batPage=0, _ecPage=0;
+let _devPage=0, _batPage=0, _ecPage=0, _alertPage=0;
+let _alerts=[], _alertFilter='all';
 
 function listPager(pages, cur, fnName){
   if(pages<=1) return '';
