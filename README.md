@@ -80,22 +80,6 @@ log_level: info
 
 ---
 
-## База данных
-
-База данных создаётся вручную один раз через терминал аддона **MariaDB**.
-
-Открой **Настройки → Аддоны → MariaDB → Терминал** и выполни:
-
-```sql
-mysql -u root -p
-
-CREATE DATABASE IF NOT EXISTS `smarthome` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER IF NOT EXISTS 'smarthome'@'%' IDENTIFIED BY 'pass';
-GRANT ALL PRIVILEGES ON `smarthome`.* TO 'smarthome'@'%';
-FLUSH PRIVILEGES;
-EXIT;
-```
-
 ### Создание базы через phpMyAdmin
 
 1. Установить аддон **phpMyAdmin** из магазина аддонов → Запустить → Открыть веб-интерфейс
