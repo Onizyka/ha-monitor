@@ -37,7 +37,34 @@
 2. Добавить: `https://github.com/Onizyka/ha-monitor`
 3. Установить **Home Assistant Monitor**
 
-### 3. Конфигурация
+### 3. Создание базы данных
+
+1. Установить аддон **phpMyAdmin** из магазина аддонов → Запустить → Открыть веб-интерфейс
+2. Нажать **SQL** (цифра 1) в верхней центральной части экрана
+3. В появившемся окне вставить код:
+
+![phpMyAdmin SQL](https://raw.githubusercontent.com/Onizyka/ha-monitor/main/smart_home_monitor/docs/phpmyadmin-sql.png)
+
+```sql
+CREATE DATABASE IF NOT EXISTS `smarthome` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER IF NOT EXISTS 'smarthome'@'%' IDENTIFIED BY 'pass';
+GRANT ALL PRIVILEGES ON `smarthome`.* TO 'smarthome'@'%';
+FLUSH PRIVILEGES;
+```
+
+Код создаёт базу данных `smarthome`, пользователя `smarthome` и пароль `pass`.
+
+4. Нажать кнопку **Вперёд** (цифра 2)
+
+База и пользователь созданы — можно запускать аддон.
+
+### Смена имени базы данных
+
+Параметр `db_name` задаётся в конфигурации аддона (по умолчанию `smarthome`). Изменить его можно только до первого запуска — переименование на работающей системе не переносит данные.
+
+Для смены имени: остановить аддон → создать новую базу командами выше с нужным именем → обновить `db_name` в конфигурации → запустить аддон.
+
+### 4. Конфигурация
 
 Вкладка **Конфигурация** аддона:
 
@@ -73,39 +100,10 @@ max_chat_id: ""
 log_level: info
 ```
 
-### 4. Запуск
+### 5. Запуск
 
 Нажать **Запустить**, затем **Открыть веб-интерфейс**.  
 Дашборд обновляется автоматически каждые 30 секунд.
-
----
-
-### Создание базы через phpMyAdmin
-
-1. Установить аддон **phpMyAdmin** из магазина аддонов → Запустить → Открыть веб-интерфейс
-2. Нажать **SQL** (цифра 1) в верхней центральной части экрана
-3. В появившемся окне вставить код:
-
-![phpMyAdmin SQL](https://raw.githubusercontent.com/Onizyka/ha-monitor/main/smart_home_monitor/docs/phpmyadmin-sql.png)
-
-```sql
-CREATE DATABASE IF NOT EXISTS `smarthome` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER IF NOT EXISTS 'smarthome'@'%' IDENTIFIED BY 'pass';
-GRANT ALL PRIVILEGES ON `smarthome`.* TO 'smarthome'@'%';
-FLUSH PRIVILEGES;
-```
-
-Код создаёт базу данных `smarthome`, пользователя `smarthome` и пароль `pass`.
-
-4. Нажать кнопку **Вперёд** (цифра 2)
-
-База и пользователь созданы — можно запускать аддон.
-
-### Смена имени базы данных
-
-Параметр `db_name` задаётся в конфигурации аддона (по умолчанию `smarthome`). Изменить его можно только до первого запуска — переименование на работающей системе не переносит данные.
-
-Для смены имени: остановить аддон → создать новую базу командами выше с нужным именем → обновить `db_name` в конфигурации → запустить аддон.
 
 ---
 
