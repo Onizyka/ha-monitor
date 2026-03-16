@@ -806,7 +806,6 @@ function devGo(p){_devPage=p;renderDevs();}
 function devRow(d){
   const n=_notify[d.ieee]||{};
   const cntC=_selMets.filter(m=>m.ieee===d.ieee).length;
-  const tgPill=n.telegram?'<span class="pill pill-tg">TG</span>':'';
   const cPill=cntC?`<span class="pill pill-chart">📈${cntC}</span>`:'';
   const badge=d.online?'<span class="badge b-ok">онлайн</span>'
     :`<span class="badge b-off">офлайн${d.offline_minutes?' '+d.offline_minutes+'м':''}</span>`;
@@ -816,7 +815,7 @@ function devRow(d){
     <div class="row-left">
       <div class="dev-icon" style="overflow:hidden">${devImg(d)}</div>
       <div>
-        <div class="name">${esc(d.friendly_name)}${tgPill}${cPill}</div>
+        <div class="name">${esc(d.friendly_name)}${cPill}</div>
         <div class="sub2">${esc(d.model||d.vendor||'—')}</div>
       </div>
     </div>
