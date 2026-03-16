@@ -549,7 +549,7 @@ select.ctrl,input.ctrl{background:var(--bg3);border:1px solid var(--border2);col
   </div>
 
   <div style="padding-top:8px;border-top:1px solid var(--border)">
-    <div style="font-size:11px;color:var(--muted)">Home Assistant Monitor v<span id="app-version">...</span></div>
+    <div style="font-size:11px;color:var(--muted)"><span id="app-version">Home Assistant Monitor v1.1.6</span></div>
     <div style="font-size:11px;color:var(--muted);margin-top:2px">Zigbee2MQTT + HA API</div>
   </div>
 </div>
@@ -1560,6 +1560,21 @@ async function loadPumps(){try{_pumps=await get('/api/pumps/');}catch(e){_pumps=
 async function loadAlerts(){
   try{_alerts=await get('/api/alerts/?limit=50');renderAlerts();}
   catch(e){document.getElementById('alert-list').innerHTML='<div class="errmsg">Ошибка</div>';}
+}
+async function clearAllAlerts(){
+  if(!confirm('Удалить все уведомления?')) return;
+  try{
+    await del('/api/alerts/');
+    _alerts=[];renderAlerts();
+    toast('Уведомления удалены');
+  }catch(e){toast('Ошибка удаления','err');}
+}
+async function loadAppVersion(){
+  try{
+    const h=await get('/api/health');
+    const v=h.version||'';
+    if(v) document.getElementById('app-version').textContent='Home Assistant Monitor v'+v;
+  }catch(e){}
 }
 function fltAlert(f,btn){
   btn.closest('.card').querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
