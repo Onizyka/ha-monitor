@@ -25,19 +25,71 @@
 
 ## База данных
 
-База создаётся один раз вручную через терминал аддона MariaDB:
+База создаётся один раз вручную через терминал аддона MariaDB или phpMyAdmin (который нужно скачать из магазина приложений).
+
+### Через phpMyAdmin
+
+1. Установить аддон **phpMyAdmin** из магазина аддонов → Запустить → Открыть веб-интерфейс
+2. Нажать **SQL** (цифра 1) в верхней центральной части экрана
+3. В появившемся окне вставить код:
+![phpMyAdmin SQL](https://raw.githubusercontent.com/Onizyka/ha-monitor/main/smart_home_monitor/docs/phpmyadmin-sql.png)
+
+
+```sql
+CREATE DATABASE IF NOT EXISTS `smarthome` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER IF NOT EXISTS 'smarthome'@'%' IDENTIFIED BY 'pass';
+GRANT ALL PRIVILEGES ON `smarthome`.* TO 'smarthome'@'%';
+FLUSH PRIVILEGES;
+```
+
+Код создаёт базу данных `smarthome`, пользователя `smarthome` и пароль `pass`.
+
+4. Нажать кнопку **Вперёд** (цифра 2)
+
+База и пользователь созданы — можно запускать аддон.
+
+### Через терминал MariaDB
 
 ```sql
 mysql -u root -p
 
 CREATE DATABASE IF NOT EXISTS `smarthome` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER IF NOT EXISTS 'smarthome'@'%' IDENTIFIED BY '<значение db_password из конфига>';
+CREATE USER IF NOT EXISTS 'smarthome'@'%' IDENTIFIED BY 'pass';
 GRANT ALL PRIVILEGES ON `smarthome`.* TO 'smarthome'@'%';
 FLUSH PRIVILEGES;
 EXIT;
 ```
 
 Имя базы, пользователя и пароль должны совпадать с `db_name`, `db_user`, `db_password` в конфигурации.
+
+## Создание базы через phpMyAdmin
+
+Если предпочитаешь графический интерфейс вместо терминала:
+
+**1. Установить phpMyAdmin**
+- Настройки → Аддоны → Магазин аддонов → найти **phpMyAdmin** → Установить
+- После установки: включить **Показывать на боковой панели** → Запустить
+
+**2. Войти в phpMyAdmin**
+- Открыть веб-интерфейс phpMyAdmin
+- Логин: `root`, пароль: оставить пустым → нажать **Вход**
+
+**3. Создать базу данных**
+- В левой панели нажать **Создать БД** (или вверху вкладка **Базы данных**)
+- Имя базы: `smarthome`
+- Сравнение: выбрать `utf8mb4_unicode_ci`
+- Нажать **Создать**
+
+**4. Создать пользователя**
+- В верхнем меню: **Учётные записи пользователей** → **Добавить учётную запись**
+- Имя пользователя: `smarthome`
+- Имя хоста: выбрать **Любой хост** (`%`)
+- Пароль: указать тот же что в поле `db_password` конфига аддона
+- Прокрутить вниз до раздела **База данных для учётной записи** → поставить галочку **Предоставить все привилегии для smarthome**
+- Нажать **Вперёд** (кнопка внизу страницы)
+
+После этого база и пользователь готовы — можно запускать аддон.
+
 
 ### Смена имени базы данных
 
