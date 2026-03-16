@@ -57,7 +57,6 @@ CREATE DATABASE IF NOT EXISTS `smarthome` CHARACTER SET utf8mb4 COLLATE utf8mb4_
 CREATE USER IF NOT EXISTS 'smarthome'@'%' IDENTIFIED BY 'pass';
 GRANT ALL PRIVILEGES ON `smarthome`.* TO 'smarthome'@'%';
 FLUSH PRIVILEGES;
-EXIT;
 ```
 
 Имя базы, пользователя и пароль должны совпадать с `db_name`, `db_user`, `db_password` в конфигурации.
