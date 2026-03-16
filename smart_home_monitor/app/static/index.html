@@ -326,10 +326,7 @@ select.ctrl,input.ctrl{background:var(--bg3);border:1px solid var(--border2);col
 
     <div class="msec">
       <div class="msec-title">Уведомления</div>
-      <div class="trow">
-        <div><div class="tlbl">Telegram</div><div class="tdesc">Включить Telegram-алерты для этого устройства</div></div>
-        <label class="tgl"><input type="checkbox" id="m-tg" onchange="saveNotify()"><span class="tgl-t"></span></label>
-      </div>
+
 
       <div class="trow" style="margin-top:4px">
         <div><div class="tlbl">Офлайн</div><div class="tdesc">Уведомлять при потере связи</div></div>
@@ -847,7 +844,6 @@ async function openModal(ieee){
     if(clearBtn) clearBtn.style.display=custom?'inline':'none';
   }
   document.getElementById('m-sub').textContent=[d.vendor,d.model,d.device_type].filter(Boolean).join(' · ')||ieee;
-  document.getElementById('m-tg').checked=!!n.telegram;
   document.getElementById('m-off').checked=n.offline!==false;
   document.getElementById('m-off-min').value=n.offline_minutes||_sett.offline_check_minutes||30;
   document.getElementById('m-info').innerHTML=[
@@ -1178,7 +1174,7 @@ function saveNotify(){
   // Preserve battery settings (managed separately in battery modal)
   const prev=_notify[_curDev.ieee]||{};
   _notify[_curDev.ieee]={
-    telegram:document.getElementById('m-tg').checked,
+    telegram: true,
     battery:prev.battery!==false,
     battery_threshold:prev.battery_threshold||20,
     offline:document.getElementById('m-off').checked,
@@ -1192,7 +1188,7 @@ async function tgTestDevice(){
   if(!_curDev)return;
   const d=_curDev;
   const n={
-    telegram: document.getElementById('m-tg').checked,
+    telegram: true,
     battery:  _notify[_curDev?.ieee||'']?.battery!==false,
     offline:  document.getElementById('m-off').checked,
   };
