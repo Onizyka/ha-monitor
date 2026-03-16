@@ -30,6 +30,7 @@
 | Mosquitto broker | MQTT брокер для Zigbee2MQTT |
 | Zigbee2MQTT | Мост Zigbee-координатора |
 | MariaDB | Хранилище данных |
+| phpMyAdmin | Управление базой данных |
 
 ### 2. Установка
 

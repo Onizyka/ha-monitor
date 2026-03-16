@@ -22,6 +22,7 @@
 | Mosquitto broker | MQTT брокер |
 | Zigbee2MQTT | Мост Zigbee-координатора |
 | MariaDB | База данных |
+| phpMyAdmin | Управление базой данных |
 
 ## Быстрый старт
 
