@@ -21,7 +21,7 @@ async def list_batteries(
         .order_by(Device.battery)
     )
     if low_only:
-        q = q.where(Device.battery <= settings.telegram_battery_threshold)
+        q = q.where(Device.battery <= settings._battery_threshold)
 
     result = await db.execute(q)
     devices = result.scalars().all()

@@ -106,6 +106,7 @@ async def send_alert(message: str, level: str = "warn", html: bool = False) -> b
     body = message if html else _html(message)
     text = f"{icon} <b>Smart Home</b> <code>{now}</code>\n{body}"
 
+    tg_ok = False
     try:
         bot = Bot(token=settings.telegram_token)
         await bot.send_message(
@@ -113,21 +114,22 @@ async def send_alert(message: str, level: str = "warn", html: bool = False) -> b
             text=text,
             parse_mode=ParseMode.HTML,
         )
-        return True
+        tg_ok = True
     except TelegramError as e:
         from telegram.error import Conflict
         if isinstance(e, Conflict):
             logger.warning("Telegram Conflict (another instance running): %s", e)
         else:
             logger.error("Telegram send failed: %s", e)
-        return False
-    finally:
-        # Also send to MAX if enabled
-        try:
-            from .max_bot import send_max_message
-            await send_max_message(text, html=True)
-        except Exception:
-            pass
+
+    # Send to MAX independently — regardless of Telegram result
+    try:
+        from .max_bot import send_max_message
+        await send_max_message(text, html=True)
+    except Exception:
+        pass
+
+    return tg_ok
 
 
 async def send_battery_alert(device_name: str, pct: int):

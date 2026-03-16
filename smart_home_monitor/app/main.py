@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -20,6 +21,18 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 STATIC_DIR = Path("/app/app/static")
+
+def _read_addon_version() -> str:
+    """Read version from config.json at runtime — single source of truth."""
+    try:
+        cfg_path = Path("/app/config.json")
+        if cfg_path.exists():
+            return json.loads(cfg_path.read_text()).get("version", "unknown")
+    except Exception:
+        pass
+    return "unknown"
+
+ADDON_VERSION = _read_addon_version()
 
 
 @asynccontextmanager
@@ -46,7 +59,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Home Assistant Monitor",
-    version="1.0.0",
+    version=ADDON_VERSION,
     # Do NOT set root_path here — it breaks static file URL generation
     # HA ingress proxy handles path rewriting
     lifespan=lifespan,
@@ -61,7 +74,7 @@ app.include_router(settings_router.router, prefix="/api/settings",  tags=["setti
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "version": "1.0.0",
+    return {"status": "ok", "version": ADDON_VERSION,
             "ingress_path": settings.ingress_path}
 
 

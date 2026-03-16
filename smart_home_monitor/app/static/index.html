@@ -236,10 +236,21 @@ select.ctrl,input.ctrl{background:var(--bg3);border:1px solid var(--border2);col
       <div class="card-title">Zigbee устройства</div>
       <span style="font-size:11px;color:var(--muted)">нажми для настройки</span>
     </div>
-    <div class="tabs">
-      <button class="tab active" onclick="fltDev('all',this)">Все</button>
-      <button class="tab" onclick="fltDev('online',this)">Онлайн</button>
-      <button class="tab" onclick="fltDev('offline',this)">Офлайн</button>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+      <div class="tabs" style="margin-bottom:0">
+        <button class="tab active" onclick="fltDev('all',this)">Все</button>
+        <button class="tab" onclick="fltDev('online',this)">Онлайн</button>
+        <button class="tab" onclick="fltDev('offline',this)">Офлайн</button>
+      </div>
+      <div style="position:relative;flex:1;min-width:140px;max-width:240px">
+        <input id="dev-search" type="text" placeholder="Поиск по имени…"
+          oninput="searchDevs(this.value)"
+          style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:6px;
+                 padding:4px 26px 4px 10px;font-size:12px;color:var(--text);outline:none">
+        <span id="dev-search-clear" onclick="clearDevSearch()"
+          style="display:none;position:absolute;right:7px;top:50%;transform:translateY(-50%);
+                 cursor:pointer;font-size:13px;color:var(--muted);line-height:1">✕</span>
+      </div>
     </div>
     <div id="dev-list"><div class="loader">Загрузка…</div></div>
   </div>
@@ -574,6 +585,7 @@ let _charts  = {};
 let _curDev  = null;
 let _sett    = {};
 let _devFlt  = 'all';
+let _devSearch = '';
 let _cdTimer = null, _cdVal = 30;
 
 // ── Metric definitions ───────────────────────────────────────────────────
@@ -722,7 +734,7 @@ async function loadSummary(){
 
 // ── Devices ──────────────────────────────────────────────────────────────
 async function loadDevices(){
-  try{_devs=await get('/api/devices/');renderDevs(_devFlt);}
+  try{_devs=await get('/api/devices/');renderDevs();}
   catch(e){console.error('devices error:',e);document.getElementById('dev-list').innerHTML='<div class="errmsg">Ошибка: '+String(e.message||e)+'</div>';}
 }
 
@@ -730,6 +742,22 @@ function fltDev(f,btn){
   btn.closest('.card').querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
   renderDevs(f);
+}
+function searchDevs(val){
+  _devSearch=val.trim().toLowerCase();
+  _devPage=0;
+  const clr=document.getElementById('dev-search-clear');
+  if(clr)clr.style.display=_devSearch?'block':'none';
+  renderDevs();
+}
+function clearDevSearch(){
+  _devSearch='';
+  _devPage=0;
+  const inp=document.getElementById('dev-search');
+  if(inp)inp.value='';
+  const clr=document.getElementById('dev-search-clear');
+  if(clr)clr.style.display='none';
+  renderDevs();
 }
 
 // Device type icon
@@ -791,15 +819,58 @@ function listPager(pages, cur, fnName){
 }
 
 function renderDevs(f){
-  if(f!==undefined){_devFlt=f;_devPage=0;}
+  if(f!==undefined&&f!==_devFlt){_devFlt=f;_devPage=0;}
+  else if(f!==undefined){_devFlt=f;}
   let list=_devs;
   if(_devFlt==='online')  list=_devs.filter(d=>d.online);
   if(_devFlt==='offline') list=_devs.filter(d=>!d.online);
-  if(!list.length){document.getElementById('dev-list').innerHTML='<div class="loader">Нет устройств</div>';return;}
+  if(_devSearch){
+    list=list.filter(d=>(d.friendly_name||'').toLowerCase().includes(_devSearch)
+                      ||(d.model||'').toLowerCase().includes(_devSearch)
+                      ||(d.vendor||'').toLowerCase().includes(_devSearch));
+  }
+  const container=document.getElementById('dev-list');
+  if(!list.length){
+    container.innerHTML=_devSearch
+      ?'<div class="loader">Ничего не найдено</div>'
+      :'<div class="loader">Нет устройств</div>';
+    return;
+  }
   const total=list.length, pages=Math.ceil(total/LIST_LIMIT)||1;
   if(_devPage>=pages) _devPage=pages-1;
   const slice=list.slice(_devPage*LIST_LIMIT,(_devPage+1)*LIST_LIMIT);
-  document.getElementById('dev-list').innerHTML=slice.map(d=>devRow(d)).join('')+listPager(pages,_devPage,'devGo');
+
+  // Diff-патч: если набор ieee на странице не изменился — обновляем только изменившиеся ячейки
+  const existingRows=container.querySelectorAll('.row[data-ieee]');
+  const existingIeee=[...existingRows].map(r=>r.dataset.ieee);
+  const newIeee=slice.map(d=>d.ieee);
+  const sameSet=!_devSearch&&existingIeee.length===newIeee.length&&newIeee.every((id,i)=>id===existingIeee[i]);
+
+  if(sameSet&&existingRows.length){
+    slice.forEach(d=>{
+      const row=container.querySelector(`.row[data-ieee="${CSS.escape(d.ieee)}"]`);
+      if(!row)return;
+      const dot=row.querySelector('.dot');
+      if(dot) dot.className='dot '+(d.online?'dot-ok':'dot-off');
+      const badgeEl=row.querySelector('[data-role="status-badge"]');
+      if(badgeEl){
+        const nb=d.online?'<span class="badge b-ok">онлайн</span>'
+          :`<span class="badge b-off">офлайн${d.offline_minutes?' '+d.offline_minutes+'м':''}</span>`;
+        if(badgeEl.innerHTML!==nb)badgeEl.innerHTML=nb;
+      }
+      const batEl=row.querySelector('[data-role="bat-badge"]');
+      if(batEl){
+        const nb=d.battery!=null?`<span class="badge ${d.battery<20?'b-err':d.battery<50?'b-warn':'b-ok'}" style="margin-left:2px">${d.battery}%</span>`:'';
+        if(batEl.innerHTML!==nb)batEl.innerHTML=nb;
+      }
+      const lqiEl=row.querySelector('[data-role="lqi"]');
+      if(lqiEl){const nl=d.linkquality!=null?String(d.linkquality):'';if(lqiEl.textContent!==nl)lqiEl.textContent=nl;}
+    });
+    return;
+  }
+
+  // Полный рендер при смене состава
+  container.innerHTML=slice.map(d=>devRow(d)).join('')+listPager(pages,_devPage,'devGo');
 }
 function devGo(p){_devPage=p;renderDevs();}
 
@@ -811,15 +882,20 @@ function devRow(d){
     :`<span class="badge b-off">офлайн${d.offline_minutes?' '+d.offline_minutes+'м':''}</span>`;
   const lqi=d.linkquality!=null?`<span style="font-size:11px;color:var(--muted)">${d.linkquality}</span>`:'';
   const batBadge=d.battery!=null?`<span class="badge ${d.battery<20?'b-err':d.battery<50?'b-warn':'b-ok'}" style="margin-left:2px">${d.battery}%</span>`:'';
-  return `<div class="row" onclick="openModal('${esc(d.ieee)}')">
+  return `<div class="row" data-ieee="${esc(d.ieee)}" onclick="openModal('${esc(d.ieee)}')">
     <div class="row-left">
+      <div class="dot ${d.online?'dot-ok':'dot-off'}"></div>
       <div class="dev-icon" style="overflow:hidden">${devImg(d)}</div>
       <div>
         <div class="name">${esc(d.friendly_name)}${cPill}</div>
         <div class="sub2">${esc(d.model||d.vendor||'—')}</div>
       </div>
     </div>
-    <div style="display:flex;align-items:center;gap:6px">${lqi}${batBadge}${badge}</div>
+    <div style="display:flex;align-items:center;gap:6px">
+      <span data-role="lqi" style="font-size:11px;color:var(--muted)">${d.linkquality!=null?d.linkquality:''}</span>
+      <span data-role="bat-badge">${d.battery!=null?`<span class="badge ${d.battery<20?'b-err':d.battery<50?'b-warn':'b-ok'}" style="margin-left:2px">${d.battery}%</span>`:''}</span>
+      <span data-role="status-badge">${d.online?'<span class="badge b-ok">онлайн</span>':`<span class="badge b-off">офлайн${d.offline_minutes?' '+d.offline_minutes+'м':''}</span>`}</span>
+    </div>
   </div>`;
 }
 
@@ -1428,13 +1504,34 @@ async function loadBats(){
     const total=batSorted.length, pages=Math.ceil(total/LIST_LIMIT)||1;
     if(_batPage>=pages) _batPage=pages-1;
     const slice=batSorted.slice(_batPage*LIST_LIMIT,(_batPage+1)*LIST_LIMIT);
-    document.getElementById('bat-list').innerHTML=
+    const batContainer=document.getElementById('bat-list');
+    // Diff-патч для батарейного списка
+    const existingBatRows=batContainer.querySelectorAll('.row[data-ieee]');
+    const existingBatIeee=[...existingBatRows].map(r=>r.dataset.ieee);
+    const newBatIeee=slice.map(d=>d.ieee);
+    const batSameSet=existingBatIeee.length===newBatIeee.length&&newBatIeee.every((id,i)=>id===existingBatIeee[i]);
+    if(batSameSet&&existingBatRows.length){
+      slice.forEach(d=>{
+        const row=batContainer.querySelector(`.row[data-ieee="${CSS.escape(d.ieee)}"]`);
+        if(!row)return;
+        const dot=row.querySelector('.dot');
+        if(dot)dot.className='dot '+(d.online?'dot-ok':'dot-off');
+        const p=d.battery??0;
+        const fill=row.querySelector('.bat-fill');
+        if(fill){fill.style.width=p+'%';fill.style.background=p>=30?'var(--green)':p>=15?'var(--yellow)':'var(--red)';}
+        const bb=row.querySelector('[data-role="bat-pct"]');
+        const cls=p>=30?'b-ok':p>=15?'b-warn':'b-err';
+        if(bb&&bb.textContent!==p+'%'){bb.textContent=p+'%';bb.className='badge '+cls;}
+      });
+      return;
+    }
+    batContainer.innerHTML=
       slice.map(d=>{
         const p=d.battery??0;
         const c=p>=30?'var(--green)':p>=15?'var(--yellow)':'var(--red)';
         const cls=p>=30?'b-ok':p>=15?'b-warn':'b-err';
         const n=_notify[d.ieee]||{};
-        return `<div class="row" onclick="openBatModal('${esc(d.ieee)}')">
+        return `<div class="row" data-ieee="${esc(d.ieee)}" onclick="openBatModal('${esc(d.ieee)}')">
           <div class="row-left">
             <div class="dot ${d.online?'dot-ok':'dot-off'}"></div>
             <div>
@@ -1444,7 +1541,7 @@ async function loadBats(){
           </div>
           <div class="bat-wrap" style="min-width:120px">
             <div class="bat-bg"><div class="bat-fill" style="width:${p}%;background:${c}"></div></div>
-            <span class="badge ${cls}">${p}%</span>
+            <span class="badge ${cls}" data-role="bat-pct">${p}%</span>
           </div>
         </div>`;
       }).join('')+listPager(pages,_batPage,'batGo');
@@ -1457,7 +1554,7 @@ async function loadPumps(){try{_pumps=await get('/api/pumps/');}catch(e){_pumps=
 
 // ── Alerts ───────────────────────────────────────────────────────────────
 async function loadAlerts(){
-  try{_alerts=await get('/api/alerts/?limit=50');renderAlerts('all');}
+  try{_alerts=await get('/api/alerts/?limit=50');renderAlerts();}
   catch(e){document.getElementById('alert-list').innerHTML='<div class="errmsg">Ошибка</div>';}
 }
 function fltAlert(f,btn){
@@ -1469,24 +1566,40 @@ const ATXT={ok:'#22c55e',warn:'#eab308',err:'#ef4444',info:'#3b82f6'};
 const AICO={ok:'✓',warn:'!',err:'✕',info:'i'};
 const ALERTS_PER_PAGE=10;
 function renderAlerts(f){
-  if(f!==undefined){_alertFilter=f;_alertPage=0;}
+  if(f!==undefined&&f!==_alertFilter){_alertFilter=f;_alertPage=0;}
+  else if(f!==undefined){_alertFilter=f;}
   let list=_alertFilter==='all'?_alerts:_alerts.filter(a=>a.level===_alertFilter);
   const total=list.length;
   const pages=Math.ceil(total/ALERTS_PER_PAGE)||1;
   if(_alertPage>=pages)_alertPage=pages-1;
   const slice=list.slice(_alertPage*ALERTS_PER_PAGE,(_alertPage+1)*ALERTS_PER_PAGE);
+  const alertContainer=document.getElementById('alert-list');
 
-  if(!total){document.getElementById('alert-list').innerHTML='<div class="loader">Нет уведомлений</div>';return;}
+  if(!total){alertContainer.innerHTML='<div class="loader">Нет уведомлений</div>';return;}
+
+  // Diff-патч: если набор id уведомлений не изменился — пропускаем перерисовку
+  const existingAlertIds=[...alertContainer.querySelectorAll('[data-alert-id]')].map(el=>el.dataset.alertId);
+  const newAlertIds=slice.map(a=>String(a.id));
+  if(existingAlertIds.length===newAlertIds.length&&newAlertIds.every((id,i)=>id===existingAlertIds[i])){
+    // Обновляем только acknowledged-кнопки если статус изменился
+    slice.forEach(a=>{
+      const row=alertContainer.querySelector(`[data-alert-id="${a.id}"]`);
+      if(!row)return;
+      const ackBtn=row.querySelector('[data-role="ack-btn"]');
+      if(a.acknowledged&&ackBtn)ackBtn.remove();
+    });
+    return;
+  }
 
   const rows=slice.map(a=>{
     const ts=new Date(a.ts).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
-    return `<div class="row nc">
+    return `<div class="row nc" data-alert-id="${a.id}">
       <div class="row-left" style="gap:10px">
         <div class="nicon" style="background:${ACOLS[a.level]||ACOLS.info};color:${ATXT[a.level]||ATXT.info}">${AICO[a.level]||'•'}</div>
         <div><div style="font-size:13px">${esc(a.message)}${a.sent_telegram?' 📨':''}</div><div class="sub2">${esc(a.category)} · ${ts}</div></div>
       </div>
       <div style="display:flex;gap:4px">
-        ${!a.acknowledged?`<button class="btn" onclick="ack(${a.id},this)" style="font-size:11px;padding:3px 8px">✓</button>`:''}
+        ${!a.acknowledged?`<button class="btn" data-role="ack-btn" onclick="ack(${a.id},this)" style="font-size:11px;padding:3px 8px">✓</button>`:''}
         <button class="btn" onclick="delAlert(${a.id},this)" style="font-size:11px;padding:3px 8px;color:var(--red)">🗑</button>
       </div>
     </div>`;
@@ -1590,12 +1703,32 @@ function renderEnergyCard(){
   if(_ecPage>=pages) _ecPage=pages-1;
   const ecSlice=items.slice(_ecPage*LIST_LIMIT,(_ecPage+1)*LIST_LIMIT);
 
-  document.getElementById('energy-list').innerHTML=ecSlice.map(it=>{
+  const energyContainer=document.getElementById('energy-list');
+  // Diff-патч: если набор ключей метрик не изменился — обновляем только значения
+  const existingEcKeys=[...energyContainer.querySelectorAll('[data-ec-key]')].map(el=>el.dataset.ecKey);
+  const newEcKeys=ecSlice.map(it=>it.id||`${it.ieee}::${it.metric}`);
+  if(existingEcKeys.length===newEcKeys.length&&newEcKeys.every((k,i)=>k===existingEcKeys[i])){
+    ecSlice.forEach(it=>{
+      const key=it.id||`${it.ieee}::${it.metric}`;
+      const row=energyContainer.querySelector(`[data-ec-key="${CSS.escape(key)}"]`);
+      if(!row)return;
+      const lv=_lastValues[it.ieee]||{};
+      const val=lv[it.metric];
+      const MDEF_local=typeof MDEF!=='undefined'?MDEF:{};
+      const def=MDEF_local[it.metric]||{unit:''};
+      const valFmt=val!=null?(typeof val==='number'&&val>=100?Math.round(val):val.toFixed(2)):'—';
+      const valEl=row.querySelector('[data-role="ec-val"]');
+      if(valEl){const newV=val!=null?valFmt+' '+def.unit:'—';if(valEl.textContent!==newV)valEl.textContent=newV;}
+    });
+    return;
+  }
+  energyContainer.innerHTML=ecSlice.map(it=>{
     const lv=_lastValues[it.ieee]||{};
     const val=lv[it.metric];
     const valFmt=val!=null?(typeof val==='number'&&val>=100?Math.round(val):Number(val.toFixed(2))):'—';
     const unitSpan=val!=null?`<span style="font-size:11px;color:var(--muted);font-weight:400"> ${it.unit}</span>`:'';
-    return `<div class="row" onclick="openEcModal('${esc(it.ieee)}','${it.metric}')">
+    const ecKey=it.id||`${it.ieee}::${it.metric}`;
+    return `<div class="row" data-ec-key="${esc(ecKey)}" onclick="openEcModal('${esc(it.ieee)}','${it.metric}')">
       <div class="row-left">
         <div style="width:10px;height:10px;border-radius:50%;background:${it.color};flex-shrink:0;margin-right:2px"></div>
         <div>
@@ -1603,7 +1736,7 @@ function renderEnergyCard(){
           <div class="sub2">${esc(it.ieee)}</div>
         </div>
       </div>
-      <div style="font-size:16px;font-weight:600;color:var(--text);white-space:nowrap">${valFmt}${unitSpan}</div>
+      <div data-role="ec-val" style="font-size:16px;font-weight:600;color:var(--text);white-space:nowrap">${val!=null?valFmt+' '+(it.unit||''):'—'}</div>
     </div>`;
   }).join('')+listPager(pages,_ecPage,'ecGo');
 }
@@ -1679,13 +1812,25 @@ async function loadEcChart(){
   }catch(e){console.error('ec chart',e);}
 }
 
+function _isModalOpen(){
+  const ids=['modal','bat-modal','ec-modal','devmgr'];
+  return ids.some(id=>{const el=document.getElementById(id);return el&&el.style.display==='flex';});
+}
+
 async function loadAll(){
   document.getElementById('ts').textContent='Обновлено: '+new Date().toLocaleTimeString('ru-RU');
   startCountdown();
-  await Promise.allSettled([loadSummary(),loadDevices(),loadBats(),loadPumps(),loadAlerts()]);
-  // Fetch last values for energy items so current values show in list
+  const modalOpen=_isModalOpen();
+  // Всегда грузим данные — но если модалка открыта, не перерисовываем списки
+  await Promise.allSettled([
+    loadSummary(),
+    modalOpen ? get('/api/devices/').then(d=>{_devs=d;}) : loadDevices(),
+    modalOpen ? get('/api/batteries/').then(d=>{if(d&&Array.isArray(d))window._batDataCache=d;}) : loadBats(),
+    loadPumps(),
+    modalOpen ? get('/api/alerts/?limit=50').then(a=>{_alerts=a;}) : loadAlerts()
+  ]);
   await refreshEnergyValues();
-  renderEnergyCard();
+  if(!modalOpen) renderEnergyCard();
 }
 
 async function refreshEnergyValues(){

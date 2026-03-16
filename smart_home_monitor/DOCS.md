@@ -23,15 +23,25 @@
 | Zigbee2MQTT | Мост Zigbee-координатора |
 | MariaDB | База данных |
 
-## Создание базы данных
+## База данных
+
+База создаётся один раз вручную через терминал аддона MariaDB:
 
 ```sql
-CREATE DATABASE smarthome CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'smarthome'@'%' IDENTIFIED BY 'pass';
-GRANT ALL PRIVILEGES ON smarthome.* TO 'smarthome'@'%';
+mysql -u root -p
+
+CREATE DATABASE IF NOT EXISTS `smarthome` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER IF NOT EXISTS 'smarthome'@'%' IDENTIFIED BY '<значение db_password из конфига>';
+GRANT ALL PRIVILEGES ON `smarthome`.* TO 'smarthome'@'%';
 FLUSH PRIVILEGES;
+EXIT;
 ```
 
+Имя базы, пользователя и пароль должны совпадать с `db_name`, `db_user`, `db_password` в конфигурации.
+
+### Смена имени базы данных
+
+Параметр `db_name` (по умолчанию `smarthome`) задаётся до первого запуска. Для смены: остановить аддон → создать новую базу → обновить `db_name` → запустить.
 ## Настройка Telegram
 
 1. Написать [@BotFather](https://t.me/BotFather) → `/newbot` → получить токен
