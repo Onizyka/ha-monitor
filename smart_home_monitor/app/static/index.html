@@ -308,10 +308,13 @@ select.ctrl,input.ctrl{background:var(--bg3);border:1px solid var(--border2);col
 <!-- ── Alerts ── -->
 <div class="card">
   <div class="card-head"><div class="card-title">История уведомлений</div></div>
-  <div class="tabs">
-    <button class="tab active" onclick="fltAlert('all',this)">Все</button>
-    <button class="tab" onclick="fltAlert('err',this)">Ошибки</button>
-    <button class="tab" onclick="fltAlert('warn',this)">Предупреждения</button>
+  <div class="tabs" style="display:flex;align-items:center;justify-content:space-between">
+    <div>
+      <button class="tab active" onclick="fltAlert('all',this)">Все</button>
+      <button class="tab" onclick="fltAlert('err',this)">Ошибки</button>
+      <button class="tab" onclick="fltAlert('warn',this)">Предупреждения</button>
+    </div>
+    <button class="btn btn-danger" style="font-size:12px;padding:3px 10px" onclick="clearAllAlerts()">🗑 Очистить всё</button>
   </div>
   <div id="alert-list"><div class="loader">Загрузка…</div></div>
 </div>
@@ -546,7 +549,7 @@ select.ctrl,input.ctrl{background:var(--bg3);border:1px solid var(--border2);col
   </div>
 
   <div style="padding-top:8px;border-top:1px solid var(--border)">
-    <div style="font-size:11px;color:var(--muted)">Home Assistant Monitor v1.0</div>
+    <div style="font-size:11px;color:var(--muted)">Home Assistant Monitor v<span id="app-version">...</span></div>
     <div style="font-size:11px;color:var(--muted);margin-top:2px">Zigbee2MQTT + HA API</div>
   </div>
 </div>
@@ -1636,7 +1639,7 @@ async function delAllAlerts(){
   try{
     await del('/api/alerts/?acknowledged_only=true');
     toast('✓ Прочитанные уведомления удалены');
-    await loadAlerts();
+    await loadAlerts();loadAppVersion();
   }catch(e){toast('Ошибка','err');}
 }
 
