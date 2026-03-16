@@ -35,7 +35,7 @@ class Settings(BaseSettings):
 
     # Пороги — Optional чтобы выжить если HA передаёт "null"
     battery_threshold: Optional[int] = 20
-    offline_minutes: Optional[int] = 30
+    offline_minutes: Optional[int] = 180
 
     # Старые имена (обратная совместимость) — тоже Optional
     telegram_battery_threshold: Optional[int] = None
@@ -77,7 +77,7 @@ class Settings(BaseSettings):
         """Resolved offline minutes with fallback chain."""
         return (self.offline_minutes
                 or self.telegram_alert_device_offline_minutes
-                or 30)
+                or 180)
 
     @property
     def pump_entity_ids_list(self) -> List[str]:

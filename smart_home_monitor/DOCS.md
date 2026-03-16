@@ -10,6 +10,7 @@
 - 🔋 **Заряд батарей** — сортировка по уровню, график разряда, TG-алерт
 - ⚡ **Токопотребление** — мощность, ток, напряжение, энергия с графиком
 - 📈 **Конструктор графиков** — любые метрики, период от 3 часов до 30 дней
+- ⏱️ **Таймаут офлайн** — по умолчанию 180 минут (настраивается индивидуально для каждого устройства)
 - 🔔 **История уведомлений** — пагинация, автоудаление через 24ч
 - 📨 **Telegram** — алерты офлайн, батареи, превышения порогов, ежедневный отчёт
 - 💬 **MAX** *(в разработке)* — уведомления в MAX мессенджер (max.ru)
@@ -26,7 +27,7 @@
 
 ```sql
 CREATE DATABASE smarthome CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'smarthome'@'%' IDENTIFIED BY 'your_password';
+CREATE USER 'smarthome'@'%' IDENTIFIED BY 'pass';
 GRANT ALL PRIVILEGES ON smarthome.* TO 'smarthome'@'%';
 FLUSH PRIVILEGES;
 ```

@@ -56,8 +56,8 @@ FLUSH PRIVILEGES;
 # MQTT
 mqtt_host: core-mosquitto       # адрес брокера
 mqtt_port: 1883
-mqtt_user: ""                   # оставить пустым если без аутентификации
-mqtt_password: ""
+mqtt_user: "mqtt"               # логин MQTT брокера
+mqtt_password: "mqtt"          # пароль MQTT брокера
 mqtt_topic_prefix: zigbee2mqtt  # должен совпадать с настройкой Z2M
 
 # База данных
@@ -65,7 +65,7 @@ db_host: core-mariadb
 db_port: 3306
 db_name: smarthome
 db_user: smarthome
-db_password: your_password
+db_password: pass              # пароль пользователя БД
 
 # Home Assistant API
 ha_url: http://supervisor/core

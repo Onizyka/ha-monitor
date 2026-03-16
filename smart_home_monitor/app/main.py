@@ -33,6 +33,9 @@ async def lifespan(app: FastAPI):
 
     mqtt_task = asyncio.create_task(run_mqtt_listener())
     start_scheduler()
+    # Run offline check immediately on startup
+    from .jobs import check_offline_devices
+    asyncio.create_task(check_offline_devices())
     await telegram_bot.start_bot(AsyncSessionLocal)
     logger.info("Startup complete — :8080, ingress_path=%s", settings.ingress_path)
     yield
