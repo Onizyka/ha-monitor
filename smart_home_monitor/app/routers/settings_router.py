@@ -11,7 +11,7 @@ _logger = logging.getLogger(__name__)
 SFILE = Path("/data/dashboard_settings.json")
 
 DEFAULTS = {
-    "offline_check_minutes": 30,
+    "offline_check_minutes": 180,
     "daily_status_enabled": False,
     "daily_status_time": "08:00",
     "daily_status_include_availability": True,

@@ -844,7 +844,7 @@ async function openModal(ieee){
   }
   document.getElementById('m-sub').textContent=[d.vendor,d.model,d.device_type].filter(Boolean).join(' · ')||ieee;
   document.getElementById('m-off').checked=n.offline!==false;
-  document.getElementById('m-off-min').value=n.offline_minutes||_sett.offline_check_minutes||180;
+  document.getElementById('m-off-min').value=(n.offline_minutes&&n.offline_minutes!==30?n.offline_minutes:null)||_sett.offline_check_minutes||180;
   document.getElementById('m-info').innerHTML=[
     ['IEEE',d.ieee],
     ['Статус',d.online?'Онлайн':`Офлайн${d.offline_minutes?' '+d.offline_minutes+'м':''}`],
@@ -1191,7 +1191,7 @@ async function tgTestDevice(){
     battery:  _notify[_curDev?.ieee||'']?.battery!==false,
     offline:  document.getElementById('m-off').checked,
   };
-  _notify[d.ieee]={...n, offline_minutes:parseInt(document.getElementById('m-off-min').value)||30};
+  _notify[d.ieee]={...n, offline_minutes:parseInt(document.getElementById('m-off-min').value)||180};
   localStorage.setItem('smh_notify',JSON.stringify(_notify));
   // Collect all current metric values from lastV cache
   const metrics={};
