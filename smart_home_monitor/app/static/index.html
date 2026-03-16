@@ -334,7 +334,7 @@ select.ctrl,input.ctrl{background:var(--bg3);border:1px solid var(--border2);col
       </div>
       <div class="trow">
         <div><div class="tlbl">Порог офлайн (мин)</div><div class="tdesc">Считать офлайн через N минут тишины</div></div>
-        <input class="off-input" type="number" id="m-off-min" min="5" max="1440" value="30" onchange="saveNotify()">
+        <input class="off-input" type="number" id="m-off-min" min="5" max="1440" value="180" onchange="saveNotify()">
       </div>
     </div>
 
@@ -528,7 +528,7 @@ select.ctrl,input.ctrl{background:var(--bg3);border:1px solid var(--border2);col
     <div class="settings-sec-title">Мониторинг</div>
     <div class="srow">
       <div><div class="srow-label">Таймаут офлайн (мин)</div><div class="srow-desc">По умолчанию для всех устройств</div></div>
-      <input class="num-input" type="number" id="s-off-min" min="5" max="1440" value="30" onchange="saveSett()">
+      <input class="num-input" type="number" id="s-off-min" min="5" max="1440" value="180" onchange="saveSett()">
     </div>
     <button class="btn" style="width:100%;margin-top:8px" onclick="checkThresholdsNow()">⚡ Проверить пороги сейчас</button>
     <button class="btn" style="width:100%;margin-top:6px" onclick="openDeviceManager()">🗂 Управление устройствами в БД</button>
@@ -844,7 +844,7 @@ async function openModal(ieee){
   }
   document.getElementById('m-sub').textContent=[d.vendor,d.model,d.device_type].filter(Boolean).join(' · ')||ieee;
   document.getElementById('m-off').checked=n.offline!==false;
-  document.getElementById('m-off-min').value=n.offline_minutes||_sett.offline_check_minutes||30;
+  document.getElementById('m-off-min').value=n.offline_minutes||_sett.offline_check_minutes||180;
   document.getElementById('m-info').innerHTML=[
     ['IEEE',d.ieee],
     ['Статус',d.online?'Онлайн':`Офлайн${d.offline_minutes?' '+d.offline_minutes+'м':''}`],
@@ -1177,7 +1177,7 @@ function saveNotify(){
     battery:prev.battery!==false,
     battery_threshold:prev.battery_threshold||20,
     offline:document.getElementById('m-off').checked,
-    offline_minutes:parseInt(document.getElementById('m-off-min').value)||30,
+    offline_minutes:parseInt(document.getElementById('m-off-min').value)||180,
   };
   localStorage.setItem('smh_notify',JSON.stringify(_notify));
   renderDevs(_devFlt);
@@ -1434,12 +1434,11 @@ async function loadBats(){
         const c=p>=30?'var(--green)':p>=15?'var(--yellow)':'var(--red)';
         const cls=p>=30?'b-ok':p>=15?'b-warn':'b-err';
         const n=_notify[d.ieee]||{};
-        const tgOn=!!(n.telegram&&n.battery!==false);
         return `<div class="row" onclick="openBatModal('${esc(d.ieee)}')">
           <div class="row-left">
             <div class="dot ${d.online?'dot-ok':'dot-off'}"></div>
             <div>
-              <div class="name">${esc(d.friendly_name)}${tgOn?'<span class="pill pill-tg">TG</span>':''}</div>
+              <div class="name">${esc(d.friendly_name)}</div>
               <div class="sub2">${esc(d.model||d.vendor||'—')}</div>
             </div>
           </div>
@@ -1546,7 +1545,7 @@ async function loadSett(){
     document.getElementById('s-daily-time').value=_sett.daily_status_time||'08:00';
     document.getElementById('s-daily-avail').checked=_sett.daily_status_include_availability!==false;
     document.getElementById('s-daily-bat').checked=_sett.daily_status_include_battery!==false;
-    document.getElementById('s-off-min').value=_sett.offline_check_minutes||30;
+    document.getElementById('s-off-min').value=_sett.offline_check_minutes||180;
   }catch(e){}
   // also load thresholds
   try{_thresholds=await get('/api/settings/thresholds');}catch(e){}
@@ -1560,7 +1559,7 @@ async function saveSett(){
     daily_status_time:document.getElementById('s-daily-time').value,
     daily_status_include_availability:document.getElementById('s-daily-avail').checked,
     daily_status_include_battery:document.getElementById('s-daily-bat').checked,
-    offline_check_minutes:parseInt(document.getElementById('s-off-min').value)||30,
+    offline_check_minutes:parseInt(document.getElementById('s-off-min').value)||180,
   };
   try{_sett=await post('/api/settings/',s);toast('✓ Настройки сохранены');}
   catch(e){toast('✗ Ошибка сохранения','err');}
