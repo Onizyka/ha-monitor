@@ -90,10 +90,9 @@ log_level: info
 mysql -u root -p
 
 CREATE DATABASE IF NOT EXISTS `smarthome` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER IF NOT EXISTS 'smarthome'@'%' IDENTIFIED BY '<значение db_password из конфига>';
+CREATE USER IF NOT EXISTS 'smarthome'@'%' IDENTIFIED BY 'pass';
 GRANT ALL PRIVILEGES ON `smarthome`.* TO 'smarthome'@'%';
 FLUSH PRIVILEGES;
-EXIT;
 ```
 
 ### Создание базы через phpMyAdmin
