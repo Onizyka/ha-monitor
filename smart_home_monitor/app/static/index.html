@@ -549,7 +549,7 @@ select.ctrl,input.ctrl{background:var(--bg3);border:1px solid var(--border2);col
   </div>
 
   <div style="padding-top:8px;border-top:1px solid var(--border)">
-    <div style="font-size:11px;color:var(--muted)"><span id="app-version">Home Assistant Monitor v1.2.1</span></div>
+    <div style="font-size:11px;color:var(--muted)"><span id="app-version">Home Assistant Monitor v1.2.3</span></div>
     <div style="font-size:11px;color:var(--muted);margin-top:2px">Zigbee2MQTT + HA API</div>
   </div>
 </div>
@@ -577,7 +577,7 @@ let _selMets    = (()=>{
   });
 })();
 let _thresholds  = {};  // loaded from server: {"ieee::metric": {min,max,tg}}
-let _lastValues  = {};  // cache of last known values per device ieee
+let _lastValues  = JSON.parse(localStorage.getItem('smh_last_values')||'{}'); // cache of last known values per device
 let _curBatDev   = null;
 let _devImages   = JSON.parse(localStorage.getItem('smh_dev_images')||'{}');
 let _batChart    = null;
@@ -608,7 +608,19 @@ const MDEF = {
 async function get(p){
   const url=BASE+p;
   const r=await fetch(url);
-  if(!r.ok){const t=await r.text();console.error('GET',url,'->',r.status,t);throw new Error(t||r.status);}
+  if(!r.ok){
+    const t=await r.text();
+    console.error('GET',url,'->',r.status,t);
+    // Strip HTML tags from error message (e.g. 504 Gateway Time-out page)
+    const msg=t.replace(/<[^>]+>/g,'').replace(/\s+/g,' ').trim().slice(0,80)||String(r.status);
+    throw new Error(msg);
+  }
+  const ct=r.headers.get('content-type')||'';
+  if(!ct.includes('json')){
+    const t=await r.text();
+    const msg=t.replace(/<[^>]+>/g,'').replace(/\s+/g,' ').trim().slice(0,80);
+    throw new Error(msg||'Not JSON');
+  }
   return r.json();
 }
 async function post(p,b){
@@ -939,6 +951,10 @@ async function openModal(ieee){
 function closeModal(){document.getElementById('modal').style.display='none';_curDev=null;}
 
 function _renderMetrics(ieee, d, available, lastV){
+  if(!available.length){
+    document.getElementById('m-metrics').innerHTML='<div style="font-size:12px;color:var(--muted);padding:8px 0">Пока нет данных. Подожди первого MQTT-сообщения от устройства.</div>';
+    return;
+  }
   document.getElementById('m-metrics').innerHTML=available.map(mkey=>{
       const m=MDEF[mkey]||{label:mkey,unit:'',color:'#888'};
       const id=`${ieee}::${mkey}`;  // format: ieee::metric
@@ -997,14 +1013,21 @@ function _renderMetrics(ieee, d, available, lastV){
 
 async function loadDeviceMetrics(ieee){
   const d=_devs.find(x=>x.ieee===ieee);
-  // Show known metrics immediately from device data (no loading spinner)
+  // Use cached values from localStorage if available — instant render
+  const cached=_lastValues[ieee]||{};
   const available=[];
-  if(d.battery!=null)     available.push('battery');
-  if(d.linkquality!=null) available.push('linkquality');
-  const lastV={};
-  if(d.battery!=null)     lastV.battery=d.battery;
-  if(d.linkquality!=null) lastV.linkquality=d.linkquality;
-  // Render immediately with what we have
+  if(d.battery!=null||cached.battery!=null)     available.push('battery');
+  if(d.linkquality!=null||cached.linkquality!=null) available.push('linkquality');
+  if(cached.temperature!=null) available.push('temperature');
+  if(cached.humidity!=null)    available.push('humidity');
+  if(cached.voltage!=null)     available.push('voltage');
+  if(cached.power!=null)       available.push('power');
+  if(cached.current!=null)     available.push('current');
+  if(cached.energy!=null)      available.push('energy');
+  const lastV={...(d.battery!=null?{battery:d.battery}:{}),
+               ...(d.linkquality!=null?{linkquality:d.linkquality}:{}),
+               ...cached};
+  // Render immediately from cache — no waiting
   if(available.length) _renderMetrics(ieee, d, available, lastV);
   // Then load additional metrics async
   try{
@@ -1018,7 +1041,7 @@ async function loadDeviceMetrics(ieee){
     if(lv.current!=null     && !available.includes('current'))     available.push('current');
     if(lv.energy!=null      && !available.includes('energy'))      available.push('energy');
   }catch(e){}
-  _lastValues[ieee]=lastV;
+  _lastValues[ieee]=lastV;localStorage.setItem('smh_last_values',JSON.stringify(_lastValues));
   try{
     if(!available.length){
       document.getElementById('m-metrics').innerHTML='<div style="font-size:12px;color:var(--muted);padding:8px 0">Пока нет данных. Подожди первого MQTT-сообщения от устройства.</div>';
@@ -1026,7 +1049,9 @@ async function loadDeviceMetrics(ieee){
     }
     _renderMetrics(ieee, d, available, lastV);
   }catch(e){
-    document.getElementById('m-metrics').innerHTML=`<div class="errmsg">Ошибка: ${esc(e.message)}</div>`;
+    // Don't show raw HTML errors (e.g. 504 Gateway Timeout)
+    const msg = e.message && e.message.length < 100 ? e.message : 'Таймаут сервера — попробуй позже';
+    document.getElementById('m-metrics').innerHTML=`<div class="errmsg">Ошибка: ${esc(msg)}</div>`;
   }
   // Populate energy metrics section
   renderEnergySection(ieee);
@@ -1869,7 +1894,7 @@ async function refreshEnergyValues(){
     try{
       const timeout=new Promise((_,r)=>setTimeout(()=>r(new Error('timeout')),3000));
       const lv=await Promise.race([get(`/api/devices/last-values/${encodeURIComponent(ieee)}`),timeout]);
-      _lastValues[ieee]={...(_lastValues[ieee]||{}),...Object.fromEntries(Object.entries(lv).filter(([k,v])=>v!=null))};
+      _lastValues[ieee]={...(_lastValues[ieee]||{}),...Object.fromEntries(Object.entries(lv).filter(([k,v])=>v!=null))};localStorage.setItem('smh_last_values',JSON.stringify(_lastValues));
     }catch(e){}
   }));
 }
