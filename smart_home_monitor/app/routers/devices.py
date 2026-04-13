@@ -90,39 +90,17 @@ async def device_history(
     logger.info("history %s %s h=%s bk=%s -> %d rows", ieee[:8], col, hours, bk, len(result))
     return result
 
-@router.get("/metrics-check/{ieee}")
-async def metrics_check(ieee: str, db: AsyncSession = Depends(get_db)):
-    """Fast check which metrics exist for a device - uses LIMIT to avoid full scan."""
-    from sqlalchemy import text
-    METRICS = ["temperature", "humidity", "voltage", "power", "current", "energy",
-               "battery", "linkquality"]
-    result = {}
-    for metric in METRICS:
-        row = (await db.execute(text(f"""
-            SELECT 1 FROM device_history
-            WHERE ieee = :ieee AND {metric} IS NOT NULL
-            LIMIT 1
-        """), {"ieee": ieee})).first()
-        result[metric] = row is not None
-    return result
-
-
 @router.get("/last-values/{ieee}")
 async def last_values(ieee: str, db: AsyncSession = Depends(get_db)):
     """Most recent value for every metric — no time filter, just latest row."""
     from sqlalchemy import text
-    # Also look up by friendly_name in case history was recorded before bridge/devices sync
-    from ..models import Device
-    from sqlalchemy import select
-    dev = await db.get(Device, ieee)
-    friendly = dev.friendly_name if dev else ieee
     row = (await db.execute(text("""
         SELECT battery, linkquality, temperature, humidity,
                voltage, power, current, energy, ts
         FROM device_history
-        WHERE ieee IN (:ieee, :friendly)
+        WHERE ieee = :ieee
         ORDER BY ts DESC LIMIT 1
-    """), {"ieee": ieee, "friendly": friendly})).mappings().first()
+    """), {"ieee": ieee})).mappings().first()
 
     if not row:
         logger.warning("last-values: no rows for ieee=%s", ieee)
@@ -140,9 +118,7 @@ async def last_values(ieee: str, db: AsyncSession = Depends(get_db)):
 
 @router.get("/metrics-available")
 async def metrics_available(db: AsyncSession = Depends(get_db)):
-    """Devices with the metrics they have data for.
-    Uses last 1000 rows per device to avoid full table scan on large histories.
-    """
+    """Devices with the metrics they have data for."""
     from sqlalchemy import text
     rows = (await db.execute(text("""
         SELECT
@@ -156,12 +132,7 @@ async def metrics_available(db: AsyncSession = Depends(get_db)):
             MAX(CASE WHEN dh.current     IS NOT NULL THEN 1 ELSE 0 END) AS has_current,
             MAX(CASE WHEN dh.energy      IS NOT NULL THEN 1 ELSE 0 END) AS has_energy
         FROM devices d
-        LEFT JOIN (
-            SELECT ieee, battery, linkquality, temperature, humidity,
-                   voltage, power, current, energy
-            FROM device_history
-            WHERE ts >= UTC_TIMESTAMP() - INTERVAL 1 DAY
-        ) dh ON d.ieee = dh.ieee
+        LEFT JOIN device_history dh ON d.ieee = dh.ieee
         WHERE d.friendly_name NOT IN ('Coordinator')
           AND (d.device_type IS NULL OR LOWER(d.device_type) != 'coordinator')
         GROUP BY d.ieee, d.friendly_name, d.device_type, d.battery
