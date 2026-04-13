@@ -138,7 +138,7 @@ async def metrics_available(db: AsyncSession = Depends(get_db)):
             SELECT ieee, battery, linkquality, temperature, humidity,
                    voltage, power, current, energy
             FROM device_history
-            WHERE ts >= UTC_TIMESTAMP() - INTERVAL 7 DAY
+            WHERE ts >= UTC_TIMESTAMP() - INTERVAL 1 DAY
         ) dh ON d.ieee = dh.ieee
         WHERE d.friendly_name NOT IN ('Coordinator')
           AND (d.device_type IS NULL OR LOWER(d.device_type) != 'coordinator')

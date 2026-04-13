@@ -549,7 +549,7 @@ select.ctrl,input.ctrl{background:var(--bg3);border:1px solid var(--border2);col
   </div>
 
   <div style="padding-top:8px;border-top:1px solid var(--border)">
-    <div style="font-size:11px;color:var(--muted)"><span id="app-version">Home Assistant Monitor v1.1.8</span></div>
+    <div style="font-size:11px;color:var(--muted)"><span id="app-version">Home Assistant Monitor v1.1.9</span></div>
     <div style="font-size:11px;color:var(--muted);margin-top:2px">Zigbee2MQTT + HA API</div>
   </div>
 </div>
@@ -942,30 +942,28 @@ async function loadDeviceMetrics(ieee){
   const d=_devs.find(x=>x.ieee===ieee);
   document.getElementById('m-metrics').innerHTML='<div class="loader" style="padding:10px">Сканирование…</div>';
   try{
-    const data=await get('/api/devices/metrics-available');
-    const devData=data.find(x=>x.ieee===ieee);
-    const available=devData?.available_metrics||[];
-    // If no history yet, infer available metrics from current device data
-    if(!available.length){
-      if(d.battery!=null)     available.push('battery');
-      if(d.linkquality!=null) available.push('linkquality');
-    }
-    if(!available.length){
-      document.getElementById('m-metrics').innerHTML='<div style="font-size:12px;color:var(--muted);padding:8px 0">Пока нет данных. Подожди первого MQTT-сообщения от устройства.</div>';
-      return;
-    }
-    // Fetch all last values in one request and cache
+    // Fast path: infer metrics from device data + last-values (no heavy all-devices scan)
+    const available=[];
+    if(d.battery!=null)     available.push('battery');
+    if(d.linkquality!=null) available.push('linkquality');
     const lastV={};
     if(d.battery!=null)     lastV.battery=d.battery;
     if(d.linkquality!=null) lastV.linkquality=d.linkquality;
     try{
       const lv=await get(`/api/devices/last-values/${encodeURIComponent(ieee)}`);
-      Object.assign(lastV, Object.fromEntries(
-        Object.entries(lv).filter(([k,v])=>v!=null)
-      ));
-      _lastValues[ieee]=lastV;  // cache for test notification
+      Object.assign(lastV, Object.fromEntries(Object.entries(lv).filter(([k,v])=>v!=null)));
+      if(lv.temperature!=null && !available.includes('temperature')) available.push('temperature');
+      if(lv.humidity!=null    && !available.includes('humidity'))    available.push('humidity');
+      if(lv.voltage!=null     && !available.includes('voltage'))     available.push('voltage');
+      if(lv.power!=null       && !available.includes('power'))       available.push('power');
+      if(lv.current!=null     && !available.includes('current'))     available.push('current');
+      if(lv.energy!=null      && !available.includes('energy'))      available.push('energy');
     }catch(e){}
-
+    _lastValues[ieee]=lastV;
+    if(!available.length){
+      document.getElementById('m-metrics').innerHTML='<div style="font-size:12px;color:var(--muted);padding:8px 0">Пока нет данных. Подожди первого MQTT-сообщения от устройства.</div>';
+      return;
+    }
     document.getElementById('m-metrics').innerHTML=available.map(mkey=>{
       const m=MDEF[mkey]||{label:mkey,unit:'',color:'#888'};
       const id=`${ieee}::${mkey}`;  // format: ieee::metric
