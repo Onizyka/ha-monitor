@@ -549,7 +549,7 @@ select.ctrl,input.ctrl{background:var(--bg3);border:1px solid var(--border2);col
   </div>
 
   <div style="padding-top:8px;border-top:1px solid var(--border)">
-    <div style="font-size:11px;color:var(--muted)"><span id="app-version">Home Assistant Monitor v1.2.4</span></div>
+    <div style="font-size:11px;color:var(--muted)"><span id="app-version">Home Assistant Monitor v1.2.6</span></div>
     <div style="font-size:11px;color:var(--muted);margin-top:2px">Zigbee2MQTT + HA API</div>
   </div>
 </div>
@@ -577,19 +577,11 @@ let _selMets    = (()=>{
   });
 })();
 let _thresholds  = {};  // loaded from server: {"ieee::metric": {min,max,tg}}
-(()=>{
+let _lastValues=(()=>{
   try{
-    // v1 cache version check - clear old/corrupted cache
-    const cacheVer=localStorage.getItem('smh_lv_ver');
-    if(cacheVer!=='2'){localStorage.removeItem('smh_last_values');localStorage.setItem('smh_lv_ver','2');}
-    const raw=JSON.parse(localStorage.getItem('smh_last_values')||'{}');
-    // Validate: each key must look like an ieee address (starts with 0x)
-    const valid={};
-    Object.keys(raw).forEach(k=>{if(k.startsWith('0x')) valid[k]=raw[k];});
-    window._lastValues=valid;
-  }catch(e){window._lastValues={};}
-})();
-let _lastValues=window._lastValues; // cache of last known values per device
+    return JSON.parse(localStorage.getItem('smh_last_values')||'{}');
+  }catch(e){return {};}
+})(); // cache of last known values per device
 let _curBatDev   = null;
 let _devImages   = JSON.parse(localStorage.getItem('smh_dev_images')||'{}');
 let _batChart    = null;
@@ -1043,7 +1035,7 @@ async function loadDeviceMetrics(ieee){
   if(available.length) _renderMetrics(ieee, d, available, lastV);
   // Then load additional metrics async
   try{
-    const timeout=new Promise((_,r)=>setTimeout(()=>r(new Error('timeout')),5000));
+    const timeout=new Promise((_,r)=>setTimeout(()=>r(new Error('timeout')),10000));
     const lv=await Promise.race([get(`/api/devices/last-values/${encodeURIComponent(ieee)}`),timeout]);
     Object.assign(lastV, Object.fromEntries(Object.entries(lv).filter(([k,v])=>v!=null)));
     if(lv.temperature!=null && !available.includes('temperature')) available.push('temperature');
@@ -1061,9 +1053,12 @@ async function loadDeviceMetrics(ieee){
     }
     _renderMetrics(ieee, d, available, lastV);
   }catch(e){
-    // Don't show raw HTML errors (e.g. 504 Gateway Timeout)
-    const msg = e.message && e.message.length < 100 ? e.message : 'Таймаут сервера — попробуй позже';
-    document.getElementById('m-metrics').innerHTML=`<div class="errmsg">Ошибка: ${esc(msg)}</div>`;
+    // Only show error if no metrics are currently displayed
+    const mEl=document.getElementById('m-metrics');
+    if(mEl && !mEl.querySelector('.metric-row-wrap')){
+      const msg = e.message && e.message.length < 100 ? e.message : 'Таймаут сервера — попробуй позже';
+      mEl.innerHTML=`<div class="errmsg">Ошибка: ${esc(msg)}</div>`;
+    }
   }
   // Populate energy metrics section
   renderEnergySection(ieee);
