@@ -549,7 +549,7 @@ select.ctrl,input.ctrl{background:var(--bg3);border:1px solid var(--border2);col
   </div>
 
   <div style="padding-top:8px;border-top:1px solid var(--border)">
-    <div style="font-size:11px;color:var(--muted)"><span id="app-version">Home Assistant Monitor v1.1.7</span></div>
+    <div style="font-size:11px;color:var(--muted)"><span id="app-version">Home Assistant Monitor v1.1.8</span></div>
     <div style="font-size:11px;color:var(--muted);margin-top:2px">Zigbee2MQTT + HA API</div>
   </div>
 </div>
@@ -780,7 +780,7 @@ function devIcon(d){
   return '📡';
 }
 // Cache of checked Z2M image URLs: model -> true/false
-const _imgOk = {};
+const _imgOk = JSON.parse(localStorage.getItem('smh_img_ok')||'{}')
 
 function devImg(d){
   const icon = devIcon(d);
@@ -802,8 +802,8 @@ function devImg(d){
       // Not checked yet - show emoji, probe in background
       const src = `https://www.zigbee2mqtt.io/images/devices/${encodeURIComponent(model)}.png`;
       const img = new Image();
-      img.onload  = () => { _imgOk[model] = true; };
-      img.onerror = () => { _imgOk[model] = false; };
+      img.onload  = () => { _imgOk[model] = true; localStorage.setItem('smh_img_ok', JSON.stringify(_imgOk)); };
+      img.onerror = () => { _imgOk[model] = false; localStorage.setItem('smh_img_ok', JSON.stringify(_imgOk)); };
       img.src = src;
     }
   }
@@ -945,6 +945,11 @@ async function loadDeviceMetrics(ieee){
     const data=await get('/api/devices/metrics-available');
     const devData=data.find(x=>x.ieee===ieee);
     const available=devData?.available_metrics||[];
+    // If no history yet, infer available metrics from current device data
+    if(!available.length){
+      if(d.battery!=null)     available.push('battery');
+      if(d.linkquality!=null) available.push('linkquality');
+    }
     if(!available.length){
       document.getElementById('m-metrics').innerHTML='<div style="font-size:12px;color:var(--muted);padding:8px 0">Пока нет данных. Подожди первого MQTT-сообщения от устройства.</div>';
       return;
