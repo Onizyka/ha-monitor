@@ -544,12 +544,16 @@ select.ctrl,input.ctrl{background:var(--bg3);border:1px solid var(--border2);col
       <div><div class="srow-label">Таймаут офлайн (мин)</div><div class="srow-desc">По умолчанию для всех устройств</div></div>
       <input class="num-input" type="number" id="s-off-min" min="5" max="1440" value="180" onchange="saveSett()">
     </div>
+    <div class="srow">
+      <div><div class="srow-label">Интервал проверки порогов (мин)</div><div class="srow-desc">Как часто проверять Мин/Макс метрик</div></div>
+      <input class="num-input" type="number" id="s-thr-interval" min="1" max="60" value="5" onchange="saveSett()">
+    </div>
     <button class="btn" style="width:100%;margin-top:8px" onclick="checkThresholdsNow()">⚡ Проверить пороги сейчас</button>
     <button class="btn" style="width:100%;margin-top:6px" onclick="openDeviceManager()">🗂 Управление устройствами в БД</button>
   </div>
 
   <div style="padding-top:8px;border-top:1px solid var(--border)">
-    <div style="font-size:11px;color:var(--muted)"><span id="app-version">Home Assistant Monitor v1.1.6</span></div>
+    <div style="font-size:11px;color:var(--muted)"><span id="app-version">Home Assistant Monitor v1.5.0</span></div>
     <div style="font-size:11px;color:var(--muted);margin-top:2px">Zigbee2MQTT + HA API</div>
   </div>
 </div>
@@ -565,6 +569,10 @@ select.ctrl,input.ctrl{background:var(--bg3);border:1px solid var(--border2);col
 })();
 const BASE = window._BASE;
 
+// Populate _devImages from stored server models using current BASE
+// ── Utilities (defined early so all functions can use them) ──────────────
+function esc(s){return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
 // ── State ────────────────────────────────────────────────────────────────
 let _devs=[], _alerts=[], _pumps=[];
 let _alertFilter='all', _alertPage=0;
@@ -578,8 +586,40 @@ let _selMets    = (()=>{
 })();
 let _thresholds  = {};  // loaded from server: {"ieee::metric": {min,max,tg}}
 let _lastValues  = {};  // cache of last known values per device ieee
+let _metricsCache = null;   // in-memory cache of metrics-available
+let _metricsCacheTs = 0;    // timestamp of last metrics-available fetch
 let _curBatDev   = null;
-let _devImages   = JSON.parse(localStorage.getItem('smh_dev_images')||'{}');
+var _serverModels = JSON.parse(localStorage.getItem('smh_server_models')||'{}');
+let _devImages = {};
+async function loadDevImages(){
+  try{
+    const models=await fetch(window._BASE+'/api/devices/images-list').then(r=>r.json());
+    const serverModels = {};
+    models.forEach(m=>{
+      serverModels[m] = true;
+      delete _imgOk[m];
+      _devImages[m] = BASE + `/api/devices/image/${encodeURIComponent(m)}`;
+    });
+    localStorage.setItem('smh_server_models', JSON.stringify(serverModels));
+    Object.assign(_serverModels, serverModels);
+    // Patch already-rendered device icons without full re-render
+    _patchDevIcons();
+  }catch(e){}
+}
+
+function _patchDevIcons(){
+  // Update dev-icon divs for devices that now have server images
+  document.querySelectorAll('#dev-list .row').forEach(row=>{
+    const ieee = row.dataset.ieee;
+    if(!ieee) return;
+    const d = _devs.find(x=>x.ieee===ieee);
+    if(!d||!d.model) return;
+    if(!_devImages[d.model]) return;
+    const iconDiv = row.querySelector('.dev-icon');
+    if(!iconDiv) return;
+    iconDiv.innerHTML = `<img src="${_devImages[d.model]}" style="width:28px;height:28px;border-radius:6px;object-fit:cover;display:block">`;
+  });
+}
 let _batChart    = null;
 
 // Energy tracking: {"ieee::metric": {label, ieee, metric, color}}
@@ -609,7 +649,13 @@ async function get(p){
   const url=BASE+p;
   const r=await fetch(url);
   if(!r.ok){const t=await r.text();console.error('GET',url,'->',r.status,t);throw new Error(t||r.status);}
-  return r.json();
+  try{
+    return await r.json();
+  }catch(e){
+    const t=await r.clone().text().catch(()=>'');
+    console.error('GET JSON parse error',url,t.slice(0,200));
+    throw new Error('Ошибка разбора ответа сервера');
+  }
 }
 async function post(p,b){
   const url=BASE+p;
@@ -783,31 +829,12 @@ function devIcon(d){
 const _imgOk = {};
 
 function devImg(d){
-  const icon = devIcon(d);
-  // Custom uploaded image always shows immediately
-  const custom = _devImages[d.ieee];
-  if(custom){
-    return `<span class="dev-icon-wrap">
-      <img src="${custom}" style="width:28px;height:28px;border-radius:6px;object-fit:cover"
-        onerror="this.parentElement.innerHTML='<span style=\"font-size:16px\">${icon}</span>'">
-    </span>`;
+  const model = d.model;
+  if(model && _serverModels[model]){
+    const src = BASE + `/api/devices/image/${encodeURIComponent(model)}`;
+    return `<img src="${src}" style="width:28px;height:28px;border-radius:6px;object-fit:cover;display:block">`;
   }
-  // Z2M image: only show if already confirmed to exist, else show emoji
-  if(d.model){
-    const model = d.model;
-    if(_imgOk[model] === true){
-      const src = `https://www.zigbee2mqtt.io/images/devices/${encodeURIComponent(model)}.png`;
-      return `<img src="${src}" style="width:28px;height:28px;border-radius:6px;object-fit:cover">`;
-    } else if(_imgOk[model] !== false){
-      // Not checked yet - show emoji, probe in background
-      const src = `https://www.zigbee2mqtt.io/images/devices/${encodeURIComponent(model)}.png`;
-      const img = new Image();
-      img.onload  = () => { _imgOk[model] = true; };
-      img.onerror = () => { _imgOk[model] = false; };
-      img.src = src;
-    }
-  }
-  return `<span style="font-size:16px">${icon}</span>`;
+  return '';
 }
 
 const LIST_LIMIT=10;
@@ -875,6 +902,8 @@ function renderDevs(f){
 
   // Полный рендер при смене состава
   container.innerHTML=slice.map(d=>devRow(d)).join('')+listPager(pages,_devPage,'devGo');
+  // Patch icons if server images already loaded
+  if(Object.keys(_devImages).length) _patchDevIcons();
 }
 function devGo(p){_devPage=p;renderDevs();}
 
@@ -914,11 +943,11 @@ async function openModal(ieee){
   // Image preview
   const prev=document.getElementById('m-img-preview');
   if(prev){
-    const custom=_devImages[d.ieee];
+    const custom=_devImages[d.model]||_devImages[d.ieee]; // model key first, ieee for legacy
     const z2mSrc=d.model?`https://www.zigbee2mqtt.io/images/devices/${encodeURIComponent(d.model)}.png`:'';
     if(custom) prev.innerHTML=`<img src="${custom}" style="width:48px;height:48px;object-fit:cover;border-radius:6px">`;
-        else if(z2mSrc) prev.innerHTML=`<img src="${z2mSrc}" style="width:48px;height:48px;object-fit:cover;border-radius:6px" onerror="imgFallback(this,'${devIcon(d)}')">`;  
-    else prev.innerHTML=`<span style="font-size:24px">${devIcon(d)}</span>`;
+        else if(z2mSrc) prev.innerHTML=`<img src="${z2mSrc}" style="width:48px;height:48px;object-fit:cover;border-radius:6px" onerror="this.style.display='none'">`;  
+    else prev.innerHTML='';
     const clearBtn=document.getElementById('m-img-clear');
     if(clearBtn) clearBtn.style.display=custom?'inline':'none';
   }
@@ -940,16 +969,21 @@ function closeModal(){document.getElementById('modal').style.display='none';_cur
 
 async function loadDeviceMetrics(ieee){
   const d=_devs.find(x=>x.ieee===ieee);
-  document.getElementById('m-metrics').innerHTML='<div class="loader" style="padding:10px">Сканирование…</div>';
+  document.getElementById('m-metrics').innerHTML='<div class="loader" style="padding:10px">Загрузка…</div>';
   try{
-    const data=await get('/api/devices/metrics-available');
-    const devData=data.find(x=>x.ieee===ieee);
+    // Use in-memory cache (60s TTL) — like 1.1.0, fast after first load
+    const now=Date.now();
+    if(!_metricsCache || now-_metricsCacheTs>60000){
+      _metricsCache=await get('/api/devices/metrics-available');
+      _metricsCacheTs=now;
+    }
+    const devData=_metricsCache.find(x=>x.ieee===ieee);
     const available=devData?.available_metrics||[];
     if(!available.length){
       document.getElementById('m-metrics').innerHTML='<div style="font-size:12px;color:var(--muted);padding:8px 0">Пока нет данных. Подожди первого MQTT-сообщения от устройства.</div>';
       return;
     }
-    // Fetch all last values in one request and cache
+    // Fetch last values
     const lastV={};
     if(d.battery!=null)     lastV.battery=d.battery;
     if(d.linkquality!=null) lastV.linkquality=d.linkquality;
@@ -958,7 +992,7 @@ async function loadDeviceMetrics(ieee){
       Object.assign(lastV, Object.fromEntries(
         Object.entries(lv).filter(([k,v])=>v!=null)
       ));
-      _lastValues[ieee]=lastV;  // cache for test notification
+      _lastValues[ieee]=lastV;
     }catch(e){}
 
     document.getElementById('m-metrics').innerHTML=available.map(mkey=>{
@@ -995,23 +1029,32 @@ async function loadDeviceMetrics(ieee){
             onclick="event.stopPropagation()">
           <span class="thr-unit">${m.unit}</span>
           <label class="thr-tg" onclick="event.stopPropagation()">
-            <input type="checkbox" ${thr.tg!==false?'checked':''} onchange="saveThr('${id}','tg',this.checked)" onclick="event.stopPropagation()">
-            <span>TG</span>
+            <span>Telegram</span>
+            <label class="tgl" style="transform:scale(0.75);margin-left:2px" onclick="event.stopPropagation()">
+              <input type="checkbox" ${thr.tg===true?'checked':''} onchange="event.stopPropagation();saveThr('${id}','tg',this.checked)" onclick="event.stopPropagation()">
+              <span class="tgl-t"></span>
+            </label>
           </label>
         </div>
-        ${hasThr?`<div class="thr-msg-row" onclick="event.stopPropagation()">
-          <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Текст TG при превышении макс:</div>
+        <div class="thr-msg-row" onclick="event.stopPropagation()">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+            <span style="font-size:11px;color:var(--muted)">Текст Telegram при превышении Макс:</span>
+            <button class="btn" style="font-size:10px;padding:1px 6px" onclick="event.stopPropagation();resetThrMsg('${id}','msg_max',this)" title="Вернуть текст по умолчанию">↺</button>
+          </div>
           <textarea class="thr-msg-input" rows="2"
-            placeholder="${defMsgMax}"
-            onchange="saveThr('${id}','msg_max',this.value)"
-            onclick="event.stopPropagation()">${esc(thr.msg_max||'')}</textarea>
-          ${thr.min!=null?`<div style="font-size:11px;color:var(--muted);margin:6px 0 4px">Текст TG при снижении ниже мин:</div>
+            data-default="${defMsgMax.replace(/`/g,'\\`')}"
+            oninput="saveThr('${id}','msg_max',this.value)"
+            onclick="event.stopPropagation()">${esc(thr.msg_max||defMsgMax)}</textarea>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin:6px 0 4px">
+            <span style="font-size:11px;color:var(--muted)">Текст Telegram при выходе ниже Мин:</span>
+            <button class="btn" style="font-size:10px;padding:1px 6px" onclick="event.stopPropagation();resetThrMsg('${id}','msg_min',this)" title="Вернуть текст по умолчанию">↺</button>
+          </div>
           <textarea class="thr-msg-input" rows="2"
-            placeholder="${defMsgMin}"
-            onchange="saveThr('${id}','msg_min',this.value)"
-            onclick="event.stopPropagation()">${esc(thr.msg_min||'')}</textarea>`:''}
-          <div style="font-size:10px;color:var(--muted);margin-top:4px">Переменные: {value} {unit} {min} {max} {name}</div>
-        </div>`:''}
+            data-default="${defMsgMin.replace(/`/g,'\\`')}"
+            oninput="saveThr('${id}','msg_min',this.value)"
+            onclick="event.stopPropagation()">${esc(thr.msg_min||defMsgMin)}</textarea>
+          <div style="font-size:10px;color:var(--muted);margin-top:4px">Переменные: {value} {unit} {min} {max} {name} {time}</div>
+        </div>
       </div>`;
     }).join('');
   }catch(e){
@@ -1134,20 +1177,35 @@ function renderSelChips(){
   ).join('');
 }
 
+function resetThrMsg(id, field, btn){
+  const ta = btn.closest('.thr-msg-row').querySelector(`textarea[oninput*="${field}"]`);
+  if(!ta) return;
+  const def = ta.dataset.default || '';
+  ta.value = def;
+  saveThr(id, field, def);
+}
+
 async function saveThr(id, field, value){
-  if(!_thresholds[id]) _thresholds[id]={min:null,max:null,tg:true};
+  if(!_thresholds[id]) _thresholds[id]={min:null,max:null,tg:false};
   if(field==='min')      _thresholds[id].min = value===''?null:parseFloat(value);
   else if(field==='max') _thresholds[id].max = value===''?null:parseFloat(value);
-  else if(field==='tg')  _thresholds[id].tg = !!value;
-  else if(field==='msg_max') _thresholds[id].msg_max = value.trim()||null;
-  else if(field==='msg_min') _thresholds[id].msg_min = value.trim()||null;
+  else if(field==='tg'){
+    _thresholds[id].tg = !!value;
+    // If turning ON and thresholds exist — trigger immediate check
+    if(!!value && (_thresholds[id].min!=null || _thresholds[id].max!=null)){
+      try{ await post('/api/settings/check-thresholds-now'); toast('✓ Проверка выполнена'); }
+      catch(e){ toast('Ошибка проверки: '+e.message,'err'); }
+    }
+  }
+  else if(field==='msg_max') _thresholds[id].msg_max = value||null;
+  else if(field==='msg_min') _thresholds[id].msg_min = value||null;
   try{
     await post('/api/settings/thresholds', {[id]: _thresholds[id]});
     if(field==='min'||field==='max'){
       try{ await post('/api/settings/check-thresholds-now'); } catch(e2){}
       toast('Порог сохранён, проверка запущена');
     } else if(field.startsWith('msg_')){
-      toast('Текст сообщения сохранён');
+      toast('✓ Текст сохранён');
     }
   }catch(e){ console.error('saveThr',e); toast('Ошибка сохранения','err'); }
 }
@@ -1222,28 +1280,38 @@ async function loadBatChart(){
 }
 
 
-function uploadDevImg(input){
+async function uploadDevImg(input){
   if(!_curDev||!input.files[0]) return;
-  const reader=new FileReader();
-  reader.onload=e=>{
-    const dataUrl=e.target.result;
-    _devImages[_curDev.ieee]=dataUrl;
+  const model=_curDev.model;
+  if(!model){toast('У устройства нет модели — нельзя привязать картинку','err');return;}
+  const file=input.files[0];
+  const form=new FormData();
+  form.append('file',file);
+  try{
+    const r=await fetch(BASE+`/api/devices/upload-image/${encodeURIComponent(model)}`,{method:'POST',body:form});
+    if(!r.ok) throw new Error(await r.text());
+    const data=await r.json();
+    // Store server URL in cache (keyed by model)
+    _devImages[model]=BASE+`/api/devices/image/${encodeURIComponent(model)}?t=${Date.now()}`;
     localStorage.setItem('smh_dev_images',JSON.stringify(_devImages));
-    // Update preview
     const prev=document.getElementById('m-img-preview');
-    if(prev) prev.innerHTML=`<img src="${dataUrl}" style="width:48px;height:48px;object-fit:cover">`;
+    if(prev) prev.innerHTML=`<img src="${_devImages[model]}" style="width:48px;height:48px;object-fit:cover;border-radius:6px">`;
     document.getElementById('m-img-clear').style.display='inline';
     renderDevs(_devFlt);
-    toast('✓ Картинка сохранена');
-  };
-  reader.readAsDataURL(input.files[0]);
+    toast('✓ Картинка сохранена для модели '+model);
+  }catch(e){
+    toast('Ошибка загрузки: '+e.message,'err');
+  }
 }
-function clearDevImg(){
+async function clearDevImg(){
   if(!_curDev) return;
+  const model=_curDev.model;
+  // Remove from local cache (both model and ieee keys)
+  delete _devImages[model];
   delete _devImages[_curDev.ieee];
   localStorage.setItem('smh_dev_images',JSON.stringify(_devImages));
   const prev=document.getElementById('m-img-preview');
-  if(prev) prev.innerHTML=devIcon(_curDev);
+  if(prev) prev.innerHTML='';
   document.getElementById('m-img-clear').style.display='none';
   renderDevs(_devFlt);
   toast('Картинка убрана');
@@ -1559,7 +1627,11 @@ async function loadPumps(){try{_pumps=await get('/api/pumps/');}catch(e){_pumps=
 // ── Alerts ───────────────────────────────────────────────────────────────
 async function loadAlerts(){
   try{_alerts=await get('/api/alerts/?limit=50');renderAlerts();}
-  catch(e){document.getElementById('alert-list').innerHTML='<div class="errmsg">Ошибка</div>';}
+  catch(e){
+    const raw=String(e.message||e);
+    const msg=raw.replace(/<[^>]+>/g,'').replace(/\s+/g,' ').trim().slice(0,120)||'неизвестная ошибка';
+    document.getElementById('alert-list').innerHTML='<div class="errmsg">Ошибка alerts: '+msg+'</div>';
+  }
 }
 async function clearAllAlerts(){
   if(!confirm('Удалить все уведомления?')) return;
@@ -1577,8 +1649,11 @@ async function loadAppVersion(){
   }catch(e){}
 }
 function fltAlert(f,btn){
-  btn.closest('.card').querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active');renderAlerts(f);
+  try{
+    btn.closest('.card').querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    if(typeof renderAlerts==='function') renderAlerts(f);
+  }catch(e){console.error('fltAlert error:',e);}
 }
 const ACOLS={ok:'rgba(34,197,94,.15)',warn:'rgba(234,179,8,.15)',err:'rgba(239,68,68,.15)',info:'rgba(59,130,246,.15)'};
 const ATXT={ok:'#22c55e',warn:'#eab308',err:'#ef4444',info:'#3b82f6'};
@@ -1678,6 +1753,7 @@ async function loadSett(){
     document.getElementById('s-daily-avail').checked=_sett.daily_status_include_availability!==false;
     document.getElementById('s-daily-bat').checked=_sett.daily_status_include_battery!==false;
     document.getElementById('s-off-min').value=_sett.offline_check_minutes||180;
+    document.getElementById('s-thr-interval').value=_sett.threshold_check_minutes||5;
   }catch(e){}
   // also load thresholds
   try{_thresholds=await get('/api/settings/thresholds');}catch(e){}
@@ -1692,13 +1768,12 @@ async function saveSett(){
     daily_status_include_availability:document.getElementById('s-daily-avail').checked,
     daily_status_include_battery:document.getElementById('s-daily-bat').checked,
     offline_check_minutes:parseInt(document.getElementById('s-off-min').value)||180,
+    threshold_check_minutes:parseInt(document.getElementById('s-thr-interval').value)||5,
   };
   try{_sett=await post('/api/settings/',s);toast('✓ Настройки сохранены');}
   catch(e){toast('✗ Ошибка сохранения','err');}
 }
 
-// ── Utils ─────────────────────────────────────────────────────────────────
-function esc(s){return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
 // ── Boot ──────────────────────────────────────────────────────────────────
 let _ecChart=null;
@@ -1841,6 +1916,8 @@ async function loadAll(){
   startCountdown();
   const modalOpen=_isModalOpen();
   // Всегда грузим данные — но если модалка открыта, не перерисовываем списки
+  // Load images first so they're ready when devices render
+  await loadDevImages();
   await Promise.allSettled([
     loadSummary(),
     modalOpen ? get('/api/devices/').then(d=>{_devs=d;}) : loadDevices(),
@@ -1848,6 +1925,8 @@ async function loadAll(){
     loadPumps(),
     modalOpen ? get('/api/alerts/?limit=50').then(a=>{_alerts=a;}) : loadAlerts()
   ]);
+  // Pre-warm metrics cache in background so first device open is instant
+  if(!_metricsCache) get('/api/devices/metrics-available').then(d=>{_metricsCache=d;_metricsCacheTs=Date.now();}).catch(()=>{});
   await refreshEnergyValues();
   if(!modalOpen) renderEnergyCard();
 }
