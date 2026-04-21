@@ -116,10 +116,15 @@ async def last_values(ieee: str, db: AsyncSession = Depends(get_db)):
     return result
 
 
+_metrics_cache: dict = {"data": None, "ts": 0}
+
 @router.get("/metrics-available")
 async def metrics_available(db: AsyncSession = Depends(get_db)):
-    """Devices with the metrics they have data for."""
+    """Devices with the metrics they have data for (cached 60s)."""
+    import time
     from sqlalchemy import text
+    if _metrics_cache["data"] is not None and time.time() - _metrics_cache["ts"] < 60:
+        return _metrics_cache["data"]
     rows = (await db.execute(text("""
         SELECT
             d.ieee, d.friendly_name, d.device_type, d.battery,
@@ -133,6 +138,7 @@ async def metrics_available(db: AsyncSession = Depends(get_db)):
             MAX(CASE WHEN dh.energy      IS NOT NULL THEN 1 ELSE 0 END) AS has_energy
         FROM devices d
         LEFT JOIN device_history dh ON d.ieee = dh.ieee
+            AND dh.ts >= NOW() - INTERVAL 7 DAY
         WHERE d.friendly_name NOT IN ('Coordinator')
           AND (d.device_type IS NULL OR LOWER(d.device_type) != 'coordinator')
         GROUP BY d.ieee, d.friendly_name, d.device_type, d.battery
@@ -157,6 +163,8 @@ async def metrics_available(db: AsyncSession = Depends(get_db)):
             "has_battery": bool(r["battery"] is not None or r["has_battery"]),
             "available_metrics": metrics,
         })
+    _metrics_cache["data"] = result
+    _metrics_cache["ts"] = __import__("time").time()
     return result
 
 
